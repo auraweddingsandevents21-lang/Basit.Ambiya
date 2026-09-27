@@ -17,8 +17,8 @@ export const WeddingVideoSection: React.FC = () => {
 
   const handleVideoError = () => {
     // Gracefully fall back to intro film if custom film is unavailable
-    if (currentVideoSrc !== getAssetPath('assets/intro-BHGRpJmm.mp4')) {
-      setCurrentVideoSrc(getAssetPath('assets/intro-BHGRpJmm.mp4'));
+    if (currentVideoSrc !== getAssetPath('assets/v10.mp4')) {
+      setCurrentVideoSrc(getAssetPath('assets/v10.mp4'));
     }
   };
 

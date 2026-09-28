@@ -52,8 +52,8 @@ const DEFAULT_GH_CONFIG: GitHubSyncConfig = {
   repo: 'Basti.Ambiya',
   branch: 'main',
   filePath: 'wedding-rsvps.xlsx',
-  token: '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',
-  autoSyncOnS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ubmit: true,
+  token: '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',
+  autoSyncOnSubmit: true,
 };
 
 /**

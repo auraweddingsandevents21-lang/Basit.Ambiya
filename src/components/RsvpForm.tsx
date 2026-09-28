@@ -199,18 +199,30 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
   // If viewing active or generated check-in pass
   if (viewingPass && activePass) {
     return (
-      <div className="space-y-6 max-w-xl mx-auto">
+      <div className="space-y-6 max-w-xl mx-auto animate-fade-in">
         {submitted && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-center space-y-1.5 shadow-sm">
+          <div className="relative p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-center space-y-1.5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setViewingPass(false);
+                setSubmitted(false);
+              }}
+              className="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-900 flex items-center justify-center transition-all cursor-pointer"
+              title="Close pass & return to RSVP form"
+              aria-label="Close pass and return to RSVP form"
+            >
+              ✕
+            </button>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-800 text-white font-cinzel text-xs font-bold uppercase tracking-wider">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
               <span>RSVP Confirmed</span>
             </div>
             <h3 className="font-serif-display text-lg font-bold text-emerald-950">
-              Your response has been received with gratitude!
+              Welcome, {activePass.guestName}! Your response has been received.
             </h3>
             <p className="font-serif-display text-xs text-emerald-900 italic">
-              Please save or screenshot your digital check-in pass below for swift entry at the venue.
+              Your digital entry pass with QR code &amp; barcode is ready below. Show it upon arrival at each venue.
             </p>
           </div>
         )}
@@ -219,6 +231,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
           passData={activePass}
           onBackOrEdit={() => {
             setViewingPass(false);
+            setSubmitted(false);
           }}
           showBackOption={true}
         />
@@ -298,37 +311,30 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({
     );
   }
 
+  const effectiveGuestName = (form.guest_name || initialGuestName || '').trim();
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-[#faf8f5]/90 backdrop-blur-sm border border-gold-soft/60 rounded-2xl p-6 sm:p-10 shadow-soft text-left space-y-6 max-w-xl mx-auto"
+      className="bg-[#faf8f5]/90 backdrop-blur-sm border border-gold-soft/60 rounded-2xl p-6 sm:p-10 shadow-soft text-left space-y-6 max-w-xl mx-auto animate-fade-in"
     >
-      {/* Active Pass Banner (if already confirmed) */}
-      {activePass && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-300 flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-emerald-800 text-white flex items-center justify-center shrink-0">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="font-cinzel text-xs font-bold text-emerald-950 block truncate">
-                Active Check-In Pass for {activePass.guestName}
-              </span>
-              <span className="font-serif-display text-[11px] text-emerald-800 italic block truncate">
-                Pass ID: {activePass.passId} · {activePass.guestCount} {activePass.guestCount === 1 ? 'Guest' : 'Guests'}
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setViewingPass(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-cinzel text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
-          >
-            <Ticket className="w-3.5 h-3.5" />
-            <span>View QR Pass</span>
-          </button>
+      {/* Warm Welcome Greeting Banner */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50 via-white to-amber-50/60 border border-gold-soft/80 shadow-2xs space-y-2 text-center">
+        <p className="font-arabic text-xl sm:text-2xl text-emerald-950 font-bold">
+          بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+        </p>
+        <div className="space-y-1">
+          <span className="inline-block px-3 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-cinzel text-[10px] font-bold uppercase tracking-wider">
+            🌸 Warm Welcome Greeting
+          </span>
+          <h4 className="font-cinzel text-base sm:text-lg font-bold text-emerald-950 uppercase tracking-wide">
+            {effectiveGuestName ? `Ahlan Wa Sahlan, ${effectiveGuestName}!` : 'Cordially Invited Guest'}
+          </h4>
+          <p className="font-serif-display text-xs sm:text-sm text-foreground/80 italic leading-relaxed">
+            Basit Ali &amp; Ambiya Basher joyfully request the pleasure of your gracious company. Please fill your RSVP details below to generate your official Entry Pass &amp; Barcode.
+          </p>
         </div>
-      )}
+      </div>
 
       <div className="relative border-b border-gold-soft/30 pb-4 mb-2">
         <h3 className="font-cinzel text-xs tracking-[0.25em] text-rose-deep font-bold text-center uppercase">

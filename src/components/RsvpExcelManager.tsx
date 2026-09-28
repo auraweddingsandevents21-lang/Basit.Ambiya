@@ -48,12 +48,14 @@ import {
   toggleGuestEventCheckIn,
   normalizeEventName,
   formatDateTime,
+  fetchAllRsvps,
 } from '../services/rsvpExcelService';
 import {
   WeddingWish,
   getStoredWishes,
   deleteWeddingWish,
   pushWishesToGitHub,
+  fetchAllPublicWishes,
 } from '../services/wishesService';
 import {
   ALL_FUNCTIONS,
@@ -391,15 +393,43 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
     } catch {}
   };
 
-  const loadData = () => {
+  const loadData = async () => {
+    // 1. Load immediate local cache
     setRsvps(getStoredRsvps());
     setWishes(getStoredWishes());
     setGhConfig(getGitHubConfig());
+
+    // 2. Fetch fresh submissions from server & GitHub in real time
+    try {
+      const [remoteRsvps, remoteWishes] = await Promise.all([
+        fetchAllRsvps().catch(() => getStoredRsvps()),
+        fetchAllPublicWishes().catch(() => getStoredWishes()),
+      ]);
+      if (Array.isArray(remoteRsvps)) {
+        setRsvps(remoteRsvps);
+      }
+      if (Array.isArray(remoteWishes)) {
+        setWishes(remoteWishes);
+      }
+    } catch (e) {
+      console.warn('Real-time sync notice:', e);
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
       loadData();
+      // Auto-poll every 5 seconds while Admin panel is open to receive new RSVPs from any phone immediately
+      const interval = setInterval(() => {
+        fetchAllRsvps().then((latest) => {
+          if (Array.isArray(latest)) setRsvps(latest);
+        }).catch(() => {});
+        fetchAllPublicWishes().then((latest) => {
+          if (Array.isArray(latest)) setWishes(latest);
+        }).catch(() => {});
+      }, 5000);
+
+      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -1023,7 +1053,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                 onClick={() => setSyncFeedback({ type: null, message: '' })}
                 className="text-foreground/40 hover:text-foreground text-sm"
               >
-                ✕
+                âœ•
               </button>
             </div>
           )}
@@ -1250,11 +1280,11 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                             <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-emerald-600" title="Checked in at venue" />
                           )}
                         </td>
-                        <td className="p-3 text-foreground/75 font-mono text-[11px]">{rsvp.phone || '—'}</td>
+                        <td className="p-3 text-foreground/75 font-mono text-[11px]">{rsvp.phone || 'â€”'}</td>
                         <td className="p-3">
                           {rsvp.attending === 'yes' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              ✓ Attending
+                              âœ“ Attending
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-300">
@@ -1306,7 +1336,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                                         }`}
                                         title={`${ev}: ${isAdmitted ? 'Admitted (Click to reset)' : 'Awaiting Entry (Click to admit)'}`}
                                       >
-                                        {isAdmitted ? `✓ ${shortName}` : `+ ${shortName}`}
+                                        {isAdmitted ? `âœ“ ${shortName}` : `+ ${shortName}`}
                                       </button>
                                     );
                                   })}
@@ -1314,14 +1344,14 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                               )}
                             </div>
                           ) : (
-                            <span className="text-foreground/40 text-[11px]">—</span>
+                            <span className="text-foreground/40 text-[11px]">â€”</span>
                           )}
                         </td>
                         <td className="p-3 text-foreground/80 max-w-xs truncate" title={rsvp.events.join(', ')}>
                           {rsvp.events.length > 0 ? rsvp.events.join(', ') : 'All Celebrations'}
                         </td>
                         <td className="p-3 text-foreground/75 max-w-[150px] truncate italic" title={rsvp.message || undefined}>
-                          {rsvp.message || '—'}
+                          {rsvp.message || 'â€”'}
                         </td>
                         <td className="p-3 text-foreground/60 text-[11px] whitespace-nowrap">
                           {new Date(rsvp.submitted_at).toLocaleDateString()}
@@ -1361,7 +1391,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                               </button>
                             </div>
                           ) : (
-                            <span className="text-foreground/40 text-[11px]">—</span>
+                            <span className="text-foreground/40 text-[11px]">â€”</span>
                           )}
                         </td>
                         <td className="p-3 text-right">
@@ -1435,7 +1465,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                     onClick={() => setSyncFeedback({ type: null, message: '' })}
                     className="text-foreground/40 hover:text-foreground text-sm cursor-pointer"
                   >
-                    ✕
+                    âœ•
                   </button>
                 </div>
               )}
@@ -1464,7 +1494,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                           )}
                           {wish.attending === 'yes' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              ✓ Attending
+                              âœ“ Attending
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-stone-100 text-stone-700 border border-stone-300">
@@ -1542,7 +1572,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                     onClick={() => setSyncFeedback({ type: null, message: '' })}
                     className="text-foreground/40 hover:text-foreground text-sm cursor-pointer"
                   >
-                    ✕
+                    âœ•
                   </button>
                 </div>
               )}
@@ -1668,7 +1698,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                           <div className="mt-2 pt-2 border-t border-gold-soft/30 font-serif-display text-xs text-foreground/75 space-y-0.5">
                             <p className="font-semibold text-rose-deep">{f.dateLabel}</p>
                             <p className="text-foreground/60 truncate" title={f.venue}>
-                              📍 {f.venue}
+                              ðŸ“ {f.venue}
                             </p>
                           </div>
                         </button>
@@ -1704,7 +1734,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                         {copiedInviteUrl === currentInviteUrl ? (
                           <>
                             <Check className="w-4 h-4" />
-                            <span>Copied! ✓</span>
+                            <span>Copied! âœ“</span>
                           </>
                         ) : (
                           <>
@@ -1776,7 +1806,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                       </label>
                       <span className="text-[11px] font-serif-display text-emerald-800 font-medium">
                         {selectedCardImageId === 'auto'
-                          ? '⚡ Auto-matched to invited ceremonies'
+                          ? 'âš¡ Auto-matched to invited ceremonies'
                           : 'Custom card selected'}
                       </span>
                     </div>
@@ -1793,7 +1823,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                         title="Automatically attach ceremony card matching selected functions"
                       >
                         <span className="font-cinzel font-bold text-[11px] flex items-center gap-1">
-                          <span>⚡</span> Auto Match
+                          <span>âš¡</span> Auto Match
                         </span>
                         <span className="text-[10px] opacity-80 font-serif-display truncate">
                           Invited ceremonies
@@ -1824,7 +1854,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                                 {opt.title.replace(' Ceremony Card', '').replace(' Card', '')}
                               </span>
                               <span className="text-[9px] opacity-75 font-serif-display block truncate">
-                                {opt.subtitle.split('·')[1]?.trim() || opt.subtitle}
+                                {opt.subtitle.split('Â·')[1]?.trim() || opt.subtitle}
                               </span>
                             </div>
                           </button>
@@ -1907,7 +1937,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
               <div className="bg-[#faf8f5] p-5 rounded-2xl border border-gold-soft/70 space-y-3">
                 <div className="flex items-center justify-between">
                   <h5 className="font-cinzel text-xs font-bold uppercase tracking-wider text-amber-950 flex items-center gap-2">
-                    <span>💡 Supported Function Name Parameters Cheatsheet</span>
+                    <span>ðŸ’¡ Supported Function Name Parameters Cheatsheet</span>
                   </h5>
                   <span className="text-[11px] font-serif-display italic text-foreground/60">
                     Use any of these in your link
@@ -2007,7 +2037,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                               {item.guestName}
                             </span>
                             <span className="text-[11px] text-foreground/50 font-serif-display">
-                              · {item.createdAt}
+                              Â· {item.createdAt}
                             </span>
                           </div>
 
@@ -2143,7 +2173,7 @@ export const RsvpExcelManager: React.FC<RsvpExcelManagerProps> = ({ isOpen, onCl
                 onClick={() => setViewPassGuest(null)}
                 className="w-8 h-8 rounded-full bg-stone-900/80 text-white flex items-center justify-center hover:bg-stone-900 cursor-pointer shadow-lg"
               >
-                ✕
+                âœ•
               </button>
             </div>
             <GuestCheckInPass

@@ -13,11 +13,14 @@ import {
   ArrowLeft,
   Copy,
   Check,
+  Edit3,
+  X,
 } from 'lucide-react';
 import { FlowerDivider } from './Ornaments';
 import { getAssetPath } from '../utils/assets';
 import { CheckInTimeline } from './CheckInTimeline';
 import { getStoredRsvps, normalizeEventName } from '../services/rsvpExcelService';
+import { buildGuestPassWhatsAppMessage } from '../utils/invitationConfig';
 
 export interface CheckInPassData {
   passId: string;
@@ -34,8 +37,41 @@ interface GuestCheckInPassProps {
   passData: CheckInPassData;
   onBackOrEdit?: () => void;
   showBackOption?: boolean;
+  isAdmin?: boolean;
   className?: string;
 }
+
+/**
+ * Visual High-Precision Barcode Strip
+ */
+export const PassBarcode: React.FC<{ passId: string; className?: string }> = ({ passId, className = '' }) => {
+  const bars = React.useMemo(() => {
+    const clean = (passId || 'BAPASS').replace(/[^A-Z0-9]/g, '');
+    const pattern: number[] = [];
+    for (let i = 0; i < clean.length; i++) {
+      const code = clean.charCodeAt(i);
+      pattern.push((code % 3) + 1, ((code >> 1) % 2) + 1, ((code >> 2) % 3) + 1, 1);
+    }
+    return pattern;
+  }, [passId]);
+
+  return (
+    <div className={`flex flex-col items-center justify-center p-2.5 bg-white rounded-xl border border-gold-soft/60 shadow-2xs space-y-1 ${className}`}>
+      <div className="flex items-center justify-center h-10 gap-[2px] overflow-hidden px-2 max-w-[240px]">
+        {bars.map((w, idx) => (
+          <div
+            key={idx}
+            className="bg-stone-900 h-full rounded-2xs"
+            style={{ width: `${Math.max(1.5, Math.min(3.5, w * 1.3))}px` }}
+          />
+        ))}
+      </div>
+      <span className="font-mono text-[10px] tracking-[0.2em] font-bold text-stone-700 uppercase">
+        *{passId}*
+      </span>
+    </div>
+  );
+};
 
 /**
  * Generates a deterministic, elegant Pass ID from guest name and timestamp
@@ -52,37 +88,16 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
   passData,
   onBackOrEdit,
   showBackOption = true,
+  isAdmin = false,
   className = '',
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [generating, setGenerating] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const passCardRef = useRef<HTMLDivElement>(null);
-
-  // Compute previously recorded check-ins if available
-  const existingCheckedInMap = React.useMemo(() => {
-    try {
-      const stored = getStoredRsvps();
-      const match = stored.find(
-        (r) =>
-          (r.checked_in_pass_id && r.checked_in_pass_id.toLowerCase() === (passData.passId || '').toLowerCase()) ||
-          (r.guest_name && r.guest_name.toLowerCase() === (passData.guestName || '').toLowerCase())
-      );
-      if (match?.checked_in_events_map && Object.keys(match.checked_in_events_map).length > 0) {
-        return match.checked_in_events_map;
-      }
-      if (match?.checked_in_events && match.checked_in_events.length > 0) {
-        const m: Record<string, string> = {};
-        match.checked_in_events.forEach((ev) => {
-          m[normalizeEventName(ev)] = match.checked_in_at || new Date().toISOString();
-        });
-        return m;
-      }
-    } catch {}
-    return {};
-  }, [passData.passId, passData.guestName]);
 
   // Compute verification payload
   const verificationPayload = React.useMemo(() => {
@@ -107,6 +122,40 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
     const separator = baseUrl.includes('?') ? '&' : '?';
     return `${baseUrl}${separator}${params.toString()}`;
   }, [passData]);
+
+  // Compute formatted WhatsApp Pass message
+  const formattedWhatsAppText = React.useMemo(() => {
+    return buildGuestPassWhatsAppMessage(
+      passData.guestName,
+      passData.passId,
+      passData.guestCount,
+      passData.events,
+      verificationPayload
+    );
+  }, [passData, verificationPayload]);
+
+  // Compute previously recorded check-ins if available
+  const existingCheckedInMap = React.useMemo(() => {
+    try {
+      const stored = getStoredRsvps();
+      const match = stored.find(
+        (r) =>
+          (r.checked_in_pass_id && r.checked_in_pass_id.toLowerCase() === (passData.passId || '').toLowerCase()) ||
+          (r.guest_name && r.guest_name.toLowerCase() === (passData.guestName || '').toLowerCase())
+      );
+      if (match?.checked_in_events_map && Object.keys(match.checked_in_events_map).length > 0) {
+        return match.checked_in_events_map;
+      }
+      if (match?.checked_in_events && match.checked_in_events.length > 0) {
+        const m: Record<string, string> = {};
+        match.checked_in_events.forEach((ev) => {
+          m[normalizeEventName(ev)] = match.checked_in_at || new Date().toISOString();
+        });
+        return m;
+      }
+    } catch {}
+    return {};
+  }, [passData.passId, passData.guestName]);
 
   // Generate QR Code on mount or payload change
   useEffect(() => {
@@ -334,19 +383,30 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
 
   // Share Pass via WhatsApp
   const handleSharePass = () => {
-    const text =
-      `🎟️ *WEDDING ENTRY & QUICK CHECK-IN PASS*\n\n` +
-      `👑 *Basit Ali & Ambiya Basher Wedding Celebrations*\n\n` +
-      `👤 *Honored Guest:* ${passData.guestName}\n` +
-      `🆔 *Pass ID:* ${passData.passId}\n` +
-      `👥 *Admitted:* ${passData.guestCount} ${passData.guestCount === 1 ? 'Guest' : 'Guests'}\n` +
-      `✨ *Ceremonies:* ${passData.events.join(', ')}\n\n` +
-      `📱 *Show your verified digital pass & QR code at venue entrance:*\n` +
-      `${verificationPayload}\n\n` +
-      `Awaiting your noble presence & Duas! 🌸`;
+    // Also copy formatted text to clipboard automatically
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(formattedWhatsAppText);
+      }
+    } catch {}
 
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(formattedWhatsAppText)}`;
     window.open(whatsappUrl, '_blank');
+  };
+
+  // Copy full formatted WhatsApp Pass message
+  const handleCopyPassMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(formattedWhatsAppText);
+      setCopiedMessage(true);
+      setFeedback('Full WhatsApp Entry Pass message copied to clipboard!');
+      setTimeout(() => {
+        setCopiedMessage(false);
+        setFeedback(null);
+      }, 3500);
+    } catch (e) {
+      console.warn('Copy message failed:', e);
+    }
   };
 
   // Copy verification link
@@ -368,11 +428,38 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
       {/* Decorative inner gold border */}
       <div className="absolute inset-2 sm:inset-3 border border-amber-600/30 rounded-2xl pointer-events-none" />
 
+      {/* Top Floating Close / Cross Button */}
+      {showBackOption && onBackOrEdit && (
+        <button
+          type="button"
+          onClick={onBackOrEdit}
+          className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-stone-900/10 hover:bg-stone-900/20 text-stone-800 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+          title="Close pass & return to RSVP form"
+          aria-label="Close pass and return to RSVP form"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Top Banner Header */}
       <div className="relative space-y-2 pt-2">
-        <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-800 text-white font-cinzel text-[10px] font-bold tracking-widest uppercase shadow-xs">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-          <span>Official Wedding Entry Pass</span>
+        <div className="flex items-center justify-between gap-2 px-1 pr-9">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-800 text-white font-cinzel text-[10px] font-bold tracking-widest uppercase shadow-xs">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+            <span>Official Wedding Entry Pass</span>
+          </div>
+
+          {showBackOption && onBackOrEdit && (
+            <button
+              type="button"
+              onClick={onBackOrEdit}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100/90 hover:bg-amber-200 border border-amber-300 text-amber-950 font-cinzel text-[10px] font-bold uppercase transition-all cursor-pointer shadow-2xs"
+              title="Edit your RSVP details, party size or attending ceremonies"
+            >
+              <Edit3 className="w-3 h-3 text-amber-800" />
+              <span>Edit Form</span>
+            </button>
+          )}
         </div>
 
         <p className="font-arabic text-xl sm:text-2xl text-emerald-950 font-bold tracking-wide">
@@ -464,14 +551,16 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
         </div>
       </div>
 
-      {/* Guest Visit History & Check-In Timeline */}
-      <CheckInTimeline
-        events={passData.events}
-        checkedInMap={existingCheckedInMap}
-        guestCount={passData.guestCount}
-        passId={passData.passId}
-        title="Check-In History &amp; Attendance Timeline"
-      />
+      {/* Guest Visit History & Check-In Timeline (Only shown in Admin / Host Mode) */}
+      {isAdmin && (
+        <CheckInTimeline
+          events={passData.events}
+          checkedInMap={existingCheckedInMap}
+          guestCount={passData.guestCount}
+          passId={passData.passId}
+          title="Check-In History &amp; Attendance Timeline"
+        />
+      )}
 
       {/* QR Code Container */}
       <div className="relative bg-white rounded-2xl p-4 sm:p-5 border-2 border-emerald-800/30 shadow-md inline-block max-w-xs mx-auto">
@@ -503,55 +592,113 @@ export const GuestCheckInPass: React.FC<GuestCheckInPassProps> = ({
                 : 'Instant scan & quick check-in upon arrival'}
             </p>
           </div>
+
+          {/* Realistic Visual Barcode Strip */}
+          <div className="pt-2 border-t border-gold-soft/40">
+            <PassBarcode passId={passData.passId} />
+          </div>
         </div>
       </div>
 
-      {/* Action Buttons: Download Image, WhatsApp, Copy Link */}
+      {/* Action Buttons: Guest View vs Admin/Host View */}
       <div className="space-y-2.5 pt-1">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <button
-            type="button"
-            onClick={handleDownloadPass}
-            disabled={downloading || generating}
-            className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-900 text-white font-cinzel text-xs font-bold uppercase tracking-wider hover:brightness-110 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-            title="Download full digital pass image to your device"
-          >
-            <Download className="w-4 h-4" />
-            <span>{downloading ? 'Saving Pass...' : 'Save Pass Image'}</span>
-          </button>
+        {isAdmin ? (
+          /* ADMIN / HOST DESK VIEW (Full WhatsApp & Check-In Sharing Capabilities) */
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={handleSharePass}
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-cinzel text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer"
+                title="Send formatted entry pass message directly on WhatsApp"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Send to WhatsApp</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={handleSharePass}
-            className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-cinzel text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer"
-            title="Send check-in pass details & QR link on WhatsApp"
-          >
-            <Share2 className="w-4 h-4" />
-            <span>Send to WhatsApp</span>
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={handleCopyPassMessage}
+                className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-cinzel text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm ${
+                  copiedMessage
+                    ? 'bg-emerald-800 text-white'
+                    : 'bg-[#faf6f0] hover:bg-[#f3ede2] text-emerald-950 border border-gold-soft/80'
+                }`}
+                title="Copy full WhatsApp Entry Pass message shown above"
+              >
+                {copiedMessage ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4 text-emerald-800" />}
+                <span>{copiedMessage ? 'Pass Message Copied!' : 'Copy WhatsApp Message'}</span>
+              </button>
+            </div>
 
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 border border-stone-300 text-stone-800 font-cinzel text-[11px] font-semibold transition-colors cursor-pointer"
-          >
-            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedLink ? 'Link Copied!' : 'Copy Verification Link'}</span>
-          </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadPass}
+                disabled={downloading || generating}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-cinzel text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                title="Download high-resolution pass image file"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-800" />
+                <span>{downloading ? 'Saving Image...' : 'Save Pass Image'}</span>
+              </button>
 
-          {showBackOption && onBackOrEdit && (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-cinzel text-[11px] font-semibold transition-colors cursor-pointer"
+                title="Copy entry verification link only"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-stone-600" />}
+                <span>{copiedLink ? 'Link Copied!' : 'Copy Link Only'}</span>
+              </button>
+            </div>
+
+            {/* Formatted Message Preview Card for Admin */}
+            <div className="mt-3 text-left p-3.5 rounded-xl bg-white/90 border border-gold-soft/60 space-y-1.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="font-cinzel text-[10px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                  <span>💬</span> Admin WhatsApp Pass Message:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyPassMessage}
+                  className="text-[10px] font-cinzel font-bold text-emerald-800 hover:text-emerald-950 uppercase cursor-pointer"
+                >
+                  {copiedMessage ? '✓ Copied' : 'Copy Text'}
+                </button>
+              </div>
+              <pre className="font-serif-display text-[11px] text-stone-700 whitespace-pre-wrap bg-[#faf8f5] p-2.5 rounded-lg border border-gold-soft/30 leading-relaxed max-h-36 overflow-y-auto">
+                {formattedWhatsAppText}
+              </pre>
+            </div>
+          </>
+        ) : (
+          /* GUEST VIEW (Clean, distraction-free pass with Barcode, Save Image, and Edit RSVP) */
+          <div className="space-y-2.5">
             <button
               type="button"
-              onClick={onBackOrEdit}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-cinzel text-[11px] font-semibold transition-colors cursor-pointer"
+              onClick={handleDownloadPass}
+              disabled={downloading || generating}
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-900 text-white font-cinzel text-xs sm:text-sm font-bold uppercase tracking-wider hover:brightness-110 shadow-md transition-all cursor-pointer disabled:opacity-50"
+              title="Download high-resolution pass image to your device"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Edit RSVP / Form</span>
+              <Download className="w-4 h-4 text-emerald-300" />
+              <span>{downloading ? 'Saving Digital Pass...' : '📥 Save / Download Pass Image'}</span>
             </button>
-          )}
-        </div>
+
+            {showBackOption && onBackOrEdit && (
+              <button
+                type="button"
+                onClick={onBackOrEdit}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-950 font-cinzel text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-amber-800" />
+                <span>✏️ Edit RSVP Response / Details</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {feedback && (
           <p className="font-serif-display text-xs text-emerald-800 font-semibold bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200 animate-fade-in">

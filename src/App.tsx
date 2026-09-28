@@ -24,6 +24,7 @@ import {
   recordGuestCheckIn,
   toggleGuestEventCheckIn,
   getStoredRsvps,
+  fetchAllRsvps,
   normalizeEventName,
   formatDateTime,
   RsvpRecord,
@@ -276,6 +277,9 @@ export default function App() {
         console.warn('QR checkin parsing safe fallback:', err);
       }
     }
+
+    // Sync latest RSVPs across all devices in real-time
+    fetchAllRsvps().catch(() => {});
   }, []);
 
   const handleAdmitSpecificEvent = async (eventName: string) => {
